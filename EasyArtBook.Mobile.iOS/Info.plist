@@ -20,7 +20,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
-	<string>14.0</string>
+	<string>15.0</string>
 	<!-- Required. Without this key a TestFlight build uploads, sits in "Processing",
 	     then silently disappears (export-compliance rejection). -->
 	<key>ITSAppUsesNonExemptEncryption</key>

@@ -4,7 +4,7 @@
     <!-- macOS CI only: needs the .NET 10 iOS workload and Xcode 26. Apple rejects
          TestFlight uploads not built with the current iOS SDK. -->
     <TargetFramework>net10.0-ios</TargetFramework>
-    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
