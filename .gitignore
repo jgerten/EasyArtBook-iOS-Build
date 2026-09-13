@@ -1,0 +1,6 @@
+bin/
+obj/
+ios-out/
+*.ipa
+*.user
+.DS_Store

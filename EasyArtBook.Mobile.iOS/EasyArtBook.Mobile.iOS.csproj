@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- macOS CI only: needs the .NET 10 iOS workload and Xcode 26. Apple rejects
+         TestFlight uploads not built with the current iOS SDK. -->
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <SupportedOSPlatformVersion>14.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Device builds must be arm64; the simulator RID will not install on a phone. -->
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- The app itself: pre-built IL assemblies exported from the private source
+       repo by its "Export iOS assemblies" workflow. No source lives here.
+       These same DLLs ship inside every .ipa, so nothing extra is exposed. -->
+  <ItemGroup>
+    <Reference Include="EasyArtBook.Mobile">
+      <HintPath>..\lib\EasyArtBook.Mobile.dll</HintPath>
+    </Reference>
+    <Reference Include="EasyArtBook.Application">
+      <HintPath>..\lib\EasyArtBook.Application.dll</HintPath>
+    </Reference>
+    <Reference Include="EasyArtBook.Domain">
+      <HintPath>..\lib\EasyArtBook.Domain.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Package references do not flow through <Reference>, so every NuGet
+       dependency of the shared library (for its iOS build) is re-declared here.
+       Versions mirror the private repo's Directory.Packages.props. -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia.iOS" Version="11.3.9" />
+    <PackageReference Include="Avalonia" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.9" />
+    <PackageReference Include="Avalonia.Xaml.Interactivity" Version="11.3.0.6" />
+    <PackageReference Include="Avalonia.Xaml.Interactions" Version="11.3.0.6" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.1.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.10" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <!-- Transitive deps of EasyArtBook.Application -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+</Project>

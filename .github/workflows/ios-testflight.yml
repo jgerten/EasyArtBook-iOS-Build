@@ -1,0 +1,152 @@
+name: iOS TestFlight
+
+# Builds the EasyArtBook iOS app from pre-built assemblies in ./lib and uploads
+# it to App Store Connect. On a public repo, GitHub-hosted macOS minutes are
+# free, which is the entire reason this repo exists.
+#
+# Public-repo hygiene: dispatch-only (never on push/PR, so no untrusted code
+# path can reach the secrets), read-only token, default log verbosity, and no
+# .ipa artifact - the build goes to Apple, not to a public download.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # macos-26 carries Xcode 26.x, which the .NET iOS workload requires.
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    env:
+      IOS_PROJECT: EasyArtBook.Mobile.iOS/EasyArtBook.Mobile.iOS.csproj
+      BUNDLE_ID: com.cassania.easyartbook
+      # Must match the profile name in the Apple Developer portal exactly.
+      PROFILE_NAME: EasyArtBook App Store
+      # Apple requires a strictly increasing build number and already holds
+      # build 1 from the source-repo pipeline; offset so run 1 here is 101.
+      BUILD_NUMBER_OFFSET: 100
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require exported assemblies
+        run: |
+          for a in EasyArtBook.Mobile EasyArtBook.Domain EasyArtBook.Application; do
+            test -f "lib/$a.dll" || { echo "::error::lib/$a.dll missing - run 'Export iOS assemblies' in the source repo, then copy the artifact into lib/."; exit 1; }
+          done
+          ls -la lib
+
+      - name: Select Xcode
+        # Several Xcodes on this image are partial installs whose MacOSX.sdk is
+        # unusable, so xcrun cannot resolve clang or ibtool through them. Note
+        # 26.6.0 and 26.6 are different installs and only one works, so each
+        # candidate is validated after xcode-select rather than trusting the
+        # version order.
+        run: |
+          set -u
+          PICK=""
+          for XC in /Applications/Xcode.app $(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -Vr); do
+            [ -d "$XC" ] || continue
+            sudo xcode-select -s "$XC/Contents/Developer" 2>/dev/null || continue
+            IB=$(xcrun -f ibtool 2>/dev/null || true)
+            CL=$(xcrun -f clang 2>/dev/null || true)
+            case "$IB" in "$XC"/*) ;; *) echo "Skipping $XC (ibtool -> ${IB:-none})"; continue ;; esac
+            case "$CL" in "$XC"/*) ;; *) echo "Skipping $XC (clang -> ${CL:-none})"; continue ;; esac
+            PICK="$XC"
+            break
+          done
+          if [ -z "$PICK" ]; then
+            echo "No Xcode resolves both ibtool and clang; installed:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$PICK/Contents/Developer"
+          echo "Selected $PICK"
+          xcodebuild -version
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install iOS workload
+        run: dotnet workload install ios --skip-sign-check
+
+      - name: Import signing certificate
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          p12-password: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+
+      - name: Install provisioning profile
+        uses: apple-actions/download-provisioning-profiles@v6
+        with:
+          bundle-id: ${{ env.BUNDLE_ID }}
+          profile-type: 'IOS_APP_STORE'
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_PRIVATE_KEY }}
+
+      - name: Compile app icons (fail fast)
+        # The full publish spends ~30 of its ~35 minutes in the AOT link, but the
+        # app-icon question is settled by actool in the first two. Compiling the
+        # catalog on its own first turns an icon failure into a 3-minute one.
+        run: |
+          set -o pipefail
+          dotnet build "$IOS_PROJECT" \
+            -c Release \
+            -f net10.0-ios \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -t:_CompileImageAssets 2>&1 | grep -E "actool|error" || true
+          CAR=$(find . -path "*ios-arm64/actool*" -name Assets.car | head -n1)
+          PL=$(find . -path "*ios-arm64/actool*" -name partial-info.plist | head -n1)
+          echo "Assets.car: ${CAR:-MISSING}"
+          if [ -z "$CAR" ]; then
+            echo "::error::actool produced no Assets.car - the app icon was not compiled. Stopping before the expensive AOT link."
+            exit 1
+          fi
+          if ! plutil -p "$PL" 2>/dev/null | grep -q CFBundleIcon; then
+            echo "::error::partial-info.plist has no CFBundleIcon keys - actool did not designate an app icon."
+            exit 1
+          fi
+          echo "App icon compiled - proceeding to full publish."
+
+      - name: Publish signed .ipa
+        run: |
+          BUILD_NUMBER=$(( BUILD_NUMBER_OFFSET + ${{ github.run_number }} ))
+          echo "Build number: $BUILD_NUMBER"
+          dotnet publish "$IOS_PROJECT" \
+            -c Release \
+            -f net10.0-ios \
+            -p:BuildIpa=true \
+            -p:ArchiveOnBuild=true \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:ApplicationVersion=$BUILD_NUMBER \
+            -p:CodesignKey="Apple Distribution: Hans-Joachim Robe (547PLP99YV)" \
+            -p:CodesignProvision="${{ env.PROFILE_NAME }}" \
+            -o ./ios-out
+
+      - name: Locate the .ipa
+        id: findipa
+        run: echo "path=$(find ./ios-out -name '*.ipa' | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/private_keys
+          echo "$ASC_PRIVATE_KEY" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          xcrun altool --upload-app \
+            -f "${{ steps.findipa.outputs.path }}" \
+            -t ios \
+            --apiKey "$ASC_KEY_ID" \
+            --apiIssuer "$ASC_ISSUER_ID"
