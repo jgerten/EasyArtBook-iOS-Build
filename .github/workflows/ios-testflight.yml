@@ -98,12 +98,17 @@ jobs:
         # The full publish spends ~30 of its ~35 minutes in the AOT link, but the
         # app-icon question is settled by actool in the first two. Compiling the
         # catalog on its own first turns an icon failure into a 3-minute one.
+        # _CompileImageAssets pulls in _DetectSigningIdentity, so the same
+        # signing inputs as the publish step are required here too; that also
+        # surfaces a bad cert or profile before the AOT link.
         run: |
           set -o pipefail
           dotnet build "$IOS_PROJECT" \
             -c Release \
             -f net10.0-ios \
             -p:RuntimeIdentifier=ios-arm64 \
+            -p:CodesignKey="Apple Distribution: Hans-Joachim Robe (547PLP99YV)" \
+            -p:CodesignProvision="${{ env.PROFILE_NAME }}" \
             -t:_CompileImageAssets 2>&1 | grep -E "actool|error" || true
           CAR=$(find . -path "*ios-arm64/actool*" -name Assets.car | head -n1)
           PL=$(find . -path "*ios-arm64/actool*" -name partial-info.plist | head -n1)
