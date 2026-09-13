@@ -11,9 +11,17 @@ Those assemblies are the same ones shipped inside every `.ipa`.
 
 ## Release procedure
 
-1. In the private source repo, run the **Export iOS assemblies** workflow.
-2. `gh run download -R jgerten/EasyArtBook -n ios-assemblies -D lib/`
-3. Commit and push `lib/`.
-4. Run the **iOS TestFlight** workflow here.
+From the private source repo on a machine with the .NET 10 SDK and the `ios`
+workload (no Xcode needed):
 
-Build number = 100 + run number (Apple already holds build 1).
+```powershell
+.\publish-ios.ps1                      # build from the working tree
+.\publish-ios.ps1 -Source <worktree>   # build exactly one commit
+```
+
+The script builds the assemblies, commits them to `lib/` here, pushes, and
+dispatches the **iOS TestFlight** workflow, verifying the run picked up the
+pushed commit. Build number = 100 + run number (Apple already holds build 1).
+
+Fallback without a local SDK: run the source repo's **Export iOS assemblies**
+workflow, `gh run download -n ios-assemblies -D lib/`, commit, push, dispatch.
