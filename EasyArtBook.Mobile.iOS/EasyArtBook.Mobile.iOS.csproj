@@ -46,8 +46,8 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
-    <!-- Transitive deps of EasyArtBook.Application -->
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <!-- Configuration.Abstractions and System.Text.Json (used by the Application
+         assembly) arrive transitively via Extensions.Http and the net10 shared
+         framework; pinning them lower trips NU1605. -->
   </ItemGroup>
 </Project>
