@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<!-- applinks: lets https://easyartbook.com links open this app instead of Safari
+	     (Universal Links). webcredentials: lets iOS/password managers offer
+	     easyartbook.com credentials in the app.
+	     Both require the Associated Domains capability on the App ID and the
+	     apple-app-site-association file served by easyartbook.com. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:easyartbook.com</string>
+		<string>applinks:www.easyartbook.com</string>
+		<string>webcredentials:easyartbook.com</string>
+	</array>
+</dict>
 </plist>
