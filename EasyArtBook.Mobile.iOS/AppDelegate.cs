@@ -13,6 +13,9 @@ public partial class AppDelegate : AvaloniaAppDelegate<App>
 {
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
     {
+        // Wire iOS haptics into the shared HapticFeedback bridge (used by drag-to-reorder).
+        IosHaptics.Register();
+
         return base.CustomizeAppBuilder(builder)
             .WithInterFont();
     }
