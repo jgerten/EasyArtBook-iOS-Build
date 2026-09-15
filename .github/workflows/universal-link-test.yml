@@ -127,18 +127,23 @@ jobs:
           curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://easyartbook.com/.well-known/apple-app-site-association
           echo
 
+          # NOTE: macOS has no coreutils `timeout`, so it must never wrap these
+          # commands - it returns 127 and the call never runs.
           echo "--- launch the app once so SpringBoard knows it ---"
           xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "(launch returned $?)"
           sleep 20
           xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1
           sleep 3
 
-          echo "--- open the link (30s guard) ---"
-          OUT=$( { timeout 30 xcrun simctl openurl "$UDID" "$URL"; } 2>&1 )
+          # The app was terminated above, so anything running afterwards was
+          # started by the link itself - otherwise the pre-launch would masquerade
+          # as a pass.
+          echo "--- open the link ---"
+          OUT=$(xcrun simctl openurl "$UDID" "$URL" 2>&1)
           RC=$?
           echo "openurl rc=$RC"
           echo "$OUT"
-          sleep 12
+          sleep 15
 
           echo "--- which app is running? ---"
           RUNNING=$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -iE "cassania|MobileSafari" || true)
