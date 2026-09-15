@@ -58,7 +58,7 @@ jobs:
             -c Debug \
             -f net10.0-ios \
             -p:RuntimeIdentifier=$RID \
-            -p:CodesignKey= \
+            -p:EnableCodeSigning=false \
             -o ./sim-out 2>&1 | tail -20
           find ./sim-out -name '*.app' -maxdepth 3 | head
 
