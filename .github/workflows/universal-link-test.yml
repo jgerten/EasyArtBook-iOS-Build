@@ -120,10 +120,12 @@ jobs:
           URL="https://easyartbook.com/index.html#/artbook/${{ inputs.job_id }}"
 
           echo "--- can the runner reach Apple CDN and the site? ---"
-          curl -s -o /dev/null -w "cdn %{http_code}
-" --max-time 20 https://app-site-association.cdn-apple.com/a/v1/easyartbook.com
-          curl -s -o /dev/null -w "site %{http_code}
-" --max-time 20 https://easyartbook.com/.well-known/apple-app-site-association
+          echo -n 'apple cdn: '
+          curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app-site-association.cdn-apple.com/a/v1/easyartbook.com
+          echo
+          echo -n 'site aasa: '
+          curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://easyartbook.com/.well-known/apple-app-site-association
+          echo
 
           echo "--- launch the app once so SpringBoard knows it ---"
           xcrun simctl launch "$UDID" "$BUNDLE_ID" || echo "(launch returned $?)"
