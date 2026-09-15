@@ -112,6 +112,21 @@ jobs:
       # need the association file, which iOS fetches through Apple CDN at install
       # time; probe reachability so a sandbox block is distinguishable from a real
       # routing failure.
+      # Decisive: an unsigned simulator build carries no entitlements, so iOS
+      # never registers the associated domain and Universal Links cannot route.
+      - name: Does the installed app actually carry the entitlement?
+        run: |
+          APP=$(find ./sim-out -name "*.app" -maxdepth 3 | head -n1)
+          echo "app: $APP"
+          echo "--- embedded entitlements ---"
+          codesign -d --entitlements :- "$APP" 2>&1 | head -30 || echo "(no signature / no entitlements)"
+          echo "--- associated-domains present? ---"
+          if codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q associated-domains; then
+            echo "YES - the domain is registered, so a routing failure would be real"
+          else
+            echo "NO - unsigned build, iOS cannot route Universal Links to it"
+          fi
+
       - name: Open the Universal Link
         id: open
         run: |
