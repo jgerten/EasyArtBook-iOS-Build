@@ -31,10 +31,31 @@ jobs:
         run: test -f lib/EasyArtBook.Mobile.dll
 
       - name: Select Xcode
+        # Several Xcodes on this image are partial installs whose MacOSX.sdk is
+        # unusable, so xcrun cannot resolve actool/clang through them. Validate
+        # each candidate instead of trusting the version order (same logic as the
+        # release workflow).
         run: |
-          XC=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n1)
-          echo "Using $XC"
-          sudo xcode-select -s "$XC/Contents/Developer"
+          set -u
+          PICK=""
+          for XC in /Applications/Xcode.app $(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -Vr); do
+            [ -d "$XC" ] || continue
+            sudo xcode-select -s "$XC/Contents/Developer" 2>/dev/null || continue
+            IB=$(xcrun -f ibtool 2>/dev/null || true)
+            CL=$(xcrun -f clang 2>/dev/null || true)
+            case "$IB" in "$XC"/*) ;; *) echo "Skipping $XC (ibtool -> ${IB:-none})"; continue ;; esac
+            case "$CL" in "$XC"/*) ;; *) echo "Skipping $XC (clang -> ${CL:-none})"; continue ;; esac
+            PICK="$XC"
+            break
+          done
+          if [ -z "$PICK" ]; then
+            echo "No Xcode resolves both ibtool and clang; installed:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$PICK/Contents/Developer"
+          echo "Selected $PICK"
+          xcodebuild -version
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
