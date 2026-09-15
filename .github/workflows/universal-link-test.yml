@@ -1,0 +1,128 @@
+name: Universal Link test (simulator)
+
+# Proves the end-to-end deep link on a real iOS runtime: builds the app for the
+# simulator, installs it, opens the same https://easyartbook.com link the
+# "your artbook is ready" email uses, and checks that the APP comes to the
+# foreground instead of Safari.
+#
+# Free: this repository is public, so macOS runner minutes cost nothing.
+# Throwaway: nothing here ships to TestFlight.
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Artbook job id to deep-link to
+        required: false
+        default: "2610404f-30eb-4728-a360-0670d53767ea"
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      IOS_PROJECT: EasyArtBook.Mobile.iOS/EasyArtBook.Mobile.iOS.csproj
+      BUNDLE_ID: com.cassania.easyartbook
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require exported assemblies
+        run: test -f lib/EasyArtBook.Mobile.dll
+
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n1)
+          echo "Using $XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install iOS workload
+        run: dotnet workload install ios --version 10.0.401
+
+      # The simulator runs x64/arm64 simulator binaries, not the ios-arm64 device
+      # build the release workflow produces, so this builds its own copy. No
+      # signing is involved: simulator builds are unsigned.
+      - name: Build for the simulator
+        run: |
+          set -o pipefail
+          ARCH=$(uname -m)
+          RID="iossimulator-arm64"
+          [ "$ARCH" = "x86_64" ] && RID="iossimulator-x64"
+          echo "Building $RID"
+          dotnet build "$IOS_PROJECT" \
+            -c Debug \
+            -f net10.0-ios \
+            -p:RuntimeIdentifier=$RID \
+            -p:CodesignKey= \
+            -o ./sim-out 2>&1 | tail -20
+          find ./sim-out -name '*.app' -maxdepth 3 | head
+
+      - name: Boot a simulator
+        id: sim
+        run: |
+          DEV=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          for rt,devs in d.items():
+              if 'iOS' in rt:
+                  for x in devs:
+                      if 'iPhone' in x['name']:
+                          print(x['udid'], x['name']); raise SystemExit
+          ")
+          UDID=$(echo "$DEV" | cut -d' ' -f1)
+          echo "Booting $DEV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Install the app
+        run: |
+          APP=$(find ./sim-out -name '*.app' -maxdepth 3 | head -n1)
+          echo "Installing $APP"
+          xcrun simctl install "${{ steps.sim.outputs.udid }}" "$APP"
+
+      # iOS fetches the association file when the app is installed. Give it a
+      # moment, then open the link exactly as Mail would.
+      - name: Open the Universal Link
+        id: open
+        run: |
+          UDID="${{ steps.sim.outputs.udid }}"
+          URL="https://easyartbook.com/index.html#/artbook/${{ inputs.job_id }}"
+          echo "Opening $URL"
+          sleep 15
+          xcrun simctl openurl "$UDID" "$URL"
+          sleep 12
+          echo "--- foreground app ---"
+          # The app that handled the URL is the one now running in the foreground.
+          xcrun simctl listapps "$UDID" > /tmp/apps.txt 2>/dev/null || true
+          FRONT=$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -iE 'cassania|MobileSafari' || true)
+          echo "$FRONT"
+          if echo "$FRONT" | grep -qi cassania; then
+            echo "result=app" >> "$GITHUB_OUTPUT"
+            echo "::notice::The EasyArtBook app handled the Universal Link."
+          elif echo "$FRONT" | grep -qi safari; then
+            echo "result=safari" >> "$GITHUB_OUTPUT"
+            echo "::warning::Safari handled the link, not the app."
+          else
+            echo "result=unknown" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Screenshot what is on screen
+        run: |
+          xcrun simctl io "${{ steps.sim.outputs.udid }}" screenshot /tmp/screen.png
+          ls -la /tmp/screen.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-link-screenshot
+          path: /tmp/screen.png
+
+      - name: Verdict
+        run: |
+          echo "Foreground result: ${{ steps.open.outputs.result }}"
+          test "${{ steps.open.outputs.result }}" = "app"
