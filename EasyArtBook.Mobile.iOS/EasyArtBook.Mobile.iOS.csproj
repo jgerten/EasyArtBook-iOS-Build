@@ -10,6 +10,15 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Device builds must be arm64; the simulator RID will not install on a phone. -->
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+
+    <!-- Build-time lever: ~27 of the ~30 CI minutes were the Mono AOT compiler chewing
+         through the whole BCL, Avalonia, EF Core, ImageSharp, SkiaSharp and SignalR.
+         Interpret everything and AOT only our own three assemblies. App Store-legal (it is
+         JIT that Apple bans, not the interpreter), and the interpreted code is largely
+         dormant on the phone: the app talks to the API over HTTP and never runs an EF
+         query on-device, while Avalonia renders through native Skia either way.
+         Syntax: "all" = interpret all; "-Asm" = AOT-compile that assembly instead. -->
+    <MtouchInterpreter>all,-EasyArtBook.Mobile,-EasyArtBook.Application,-EasyArtBook.Domain</MtouchInterpreter>
   </PropertyGroup>
 
   <!-- The app itself: pre-built IL assemblies exported from the private source
